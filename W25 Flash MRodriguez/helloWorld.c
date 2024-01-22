@@ -607,8 +607,30 @@ int main (void)
 
 	    flash_read(address, readData, readDataLen);
 
-	    // sprintf (read_msg, "%#X", deviceID);
-	    // MSS_UART_polled_tx_string (&g_mss_uart0, read_msg);
+	    // Routine to test chip erase
+	    // Could also try to read more of the chip
+		#define x1 1
+		#define x2 x1, x1
+		#define x4 x2, x2
+		#define x8 x4, x4
+		#define x16 x8, x8
+		#define x32 x16, x16
+
+	    uint8_t writeData2[] = {x32, x32, x32, 32};
+	    //uint8_t writeData2[255] = {[0 ... 255] = 0xAA};
+		uint8_t writeDataLen2 = sizeof(writeData2); // size in bytes
+
+		uint8_t readData2[255] = {0}; // 1 byte data read
+		uint8_t readDataLen2 = sizeof(readData2); // data length in bytes
+
+	    flash_write_page(address, writeData2, writeDataLen2);
+
+	    flash_read(address, readData2, readDataLen2);
+
+	    flash_chip_erase();
+
+	    flash_read(address, readData2, readDataLen2);
+
 	    //}
 	return 0;
 }

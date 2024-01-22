@@ -38,7 +38,7 @@ void flash_write_page(uint32_t address, uint8_t *writeData, uint8_t writeDataLen
 
 void flash_4k_sector_erase(uint32_t address);
 
-void flash_chip_erase(uint32_t address);
+void flash_chip_erase();
 
 
 
@@ -76,6 +76,8 @@ void flash_chip_erase(uint32_t address);
 #define ERASE_SECTOR_4Byte_ADR		0x21u  // Command + 4 byte adr.. Erase 4 Kbyte sector
 #define ERASE_Block_3Byte_ADR		0x52u  // Command + 3 byte adr.. Erase 32 / 64 Kbyte block
 #define ERASE_Block_4Byte_ADR		0x5Cu  // Command + 4 byte adr.. Erase 32 / 64 Kbyte block
+
+#define ERASE_CHIP					0xC7u  // Chip erase command C7 or 60
 
 
 #endif /* SPI_FLASH_W74_W25_SPI_FLASH_W74_W25_H_ */

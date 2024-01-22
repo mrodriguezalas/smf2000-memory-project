@@ -209,7 +209,23 @@ void flash_4k_sector_erase(uint32_t address){
 	SPI_clear_slave_select (SPI_INSTANCE, SPI_SLAVE_0);
 }
 
-void flash_chip_erase(uint32_t address){
+void flash_chip_erase(){
+
+	uint8_t cmd_buffer[1];
+
+	cmd_buffer[0] = WRITE_ENABLE; // Write enable needed before write command
+
+	// SPI bus actions
+	SPI_set_slave_select (SPI_INSTANCE, SPI_SLAVE_0);
+	wait_ready();
+	SPI_transfer_block (SPI_INSTANCE, cmd_buffer, 1, 0, 0 );
+
+	cmd_buffer[0] = ERASE_CHIP; // Command to erase whole chip
+
+	wait_ready();
+	SPI_transfer_block (SPI_INSTANCE, cmd_buffer, sizeof(cmd_buffer), 0, 0);
+	wait_ready();
+	SPI_clear_slave_select (SPI_INSTANCE, SPI_SLAVE_0);
 
 
 }
