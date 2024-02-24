@@ -40,6 +40,7 @@ SDRam test :
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 
 /* Driver includes */
@@ -55,8 +56,6 @@ SDRam test :
 // Include via path, omits path settings in the project settings.
 #include "drivers/mss_timer/mss_timer.h"
 #include "CMSIS/system_m2sxxx.h"
-
-
 
 
 // Gloabal variables and Defines -----------------------------------------------
@@ -114,6 +113,19 @@ struct time {
 #define BOUNCING_LIGHT					3
 
 
+// FLASH Definitions
+#define PAGE_SIZE						256U
+#define SECTOR_SIZE						4096U
+#define BLOCK_SIZE						65536U
+// User input Definitions
+#define INVALID_USER_INPUT  -1
+#define ENTER               '\r'	// Line Feed
+#define	NEW_LINE			'\n'	// New Line
+
+
+// Clock variables for flash program
+#define RTC_PRESCALER    (32768u - 1u)         /* 32KHz crystal is RTC clock source. */
+
 
 // Global variables   -  volatile for values which are used outside the ISR
 struct combine {
@@ -155,9 +167,10 @@ void init_Gpio_Inputs (void) {
 
 // Initialize the RTC for an ISR period of 0.5 second.
 void init_RealTimeCounter (void) {
-    MSS_RTC_init (MSS_RTC_BINARY_MODE, HALF_A_SECOND - 1u);
+    //MSS_RTC_init (MSS_RTC_BINARY_MODE, HALF_A_SECOND - 1u);
+    MSS_RTC_init (MSS_RTC_CALENDAR_MODE, RTC_PRESCALER);
     MSS_RTC_start();
-    MSS_RTC_set_binary_count_alarm (1, MSS_RTC_PERIODIC_ALARM);
+    //MSS_RTC_set_binary_count_alarm (1, MSS_RTC_PERIODIC_ALARM);
     MSS_RTC_enable_irq();
 }
 
@@ -480,8 +493,14 @@ void runTimeTest (mss_uart_instance_t * this_uart) {
     MSS_TIM1_init (MSS_TIMER_PERIODIC_MODE);
     MSS_TIM1_load_immediate (timer1_load_value);
     MSS_TIM1_start();
+    uint8_t writeSectorData[256] = {};
+	//One zero pattern
+	writeSectorData[0] = 0x5A; // 0101 1010 pattern
+	memcpy(writeSectorData + 2, writeSectorData, sizeof writeSectorData - sizeof *writeSectorData);
+
 
     // Here code for runtime test ##############################################
+	flash_write_clean_full_chip(writeSectorData);
 
 
 	uint32_t end =  MSS_TIM1_get_current_value();
@@ -546,8 +565,10 @@ void ledChangePattern (struct combine * app) {
 	}
 }
 
+static void display_greeting(void);
+static void get_address_from_user(void);
+static int32_t get_input_from_user(void);
 
-// Prints "Hello World" and the runtime + ... since boot every 5 seconds
 int main (void)
 {
 	// Initialization
@@ -569,11 +590,9 @@ int main (void)
 
 
 	// While loop variables
-	uint8_t msg[100] = "";
 	uint16_t dutyCycle = 0;
 
 	// Flash variables
-	uint8_t status[2]; // status registers
 	uint32_t address = 0x0; // 24 byte address to read
 	uint8_t readData[16] = {0}; // 1 byte data read
 	uint8_t readDataLen = sizeof(readData); // data length in bytes
@@ -584,53 +603,269 @@ int main (void)
 
 	uint8_t read_msg[30];
 
-	//while (1) {
 
-		// Example JEDEC ID read
-		//core_spi_read_jedec_id (SPI_INSTANCE, SPI_SLAVE_0, &g_mss_uart0);
 
 		// Custom functions
 		flash_manufacturer_device_id_read(&g_mss_uart0);
-		//custom_jedec_id_read(&core_spi_instance0, SPI_SLAVE_0);
-		//read_status_register(&core_spi_instance0, SPI_SLAVE_0, status);
 	    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\r\n\r\n************************** SPI Ready ************************");
 
-	    flash_read(address, readData, readDataLen);
+	    uint8_t writeData2[] = {};
+	    uint8_t allZeros[256] = {};
+	    uint8_t allOnes[256] = {[0 ... 255] = 1};
+	    uint8_t zeroOnePattern[256] = {[0 ... 255] = 0xAA};
+		//uint16_t zeroOnePatternLen = sizeof(zeroOnePattern); // size in bytes
 
-	    // Need to erase first
-	    flash_4k_sector_erase(address);
+		// Generate zero-one pattern
+		//One zero pattern
+		//zeroOnePattern[0] = 0xaa; //was 0xff
+		//memcpy(zeroOnePattern, zeroOnePattern, sizeof zeroOnePattern - sizeof *zeroOnePattern);
 
-	    // Read cleared sector
-	    flash_read(address, readData, readDataLen);
+	    // A sector is 4096, 16 sector in a block
+	    // We have 128 blocks of 64KB (65 536 bytes)
+	    uint8_t writeSectorData[256] = {[0 ... 255] = 0x5A};
+	    //One zero pattern
+	    // memory with the same pattern
+		//writeSectorData[0] = 0x5A; // 0101 1010 pattern
+	    //memcpy(writeSectorData, writeSectorData, sizeof writeSectorData - sizeof *writeSectorData);
 
-	    flash_write_page(address, writeData, writeDataLen);
+	    //flash_write_clean_full_chip(writeSectorData);
 
-	    flash_read(address, readData, readDataLen);
+	    // Verify first sector of each block
+	    uint8_t rxBlock0Sector[4096] = {};
+	    uint32_t addressBlock0 = 0 * BLOCK_SIZE;
+/*
+	    uint8_t rxBlock8Sector[4096] = {};
+	    uint32_t addressBlock8 = 8 * BLOCK_SIZE;
 
-	    // Routine to test chip erase
-	    // Could also try to read more of the chip
-		#define x1 1
-		#define x2 x1, x1
-		#define x4 x2, x2
-		#define x8 x4, x4
-		#define x16 x8, x8
-		#define x32 x16, x16
+	    uint8_t rxBlock64[4096] = {};
+	    uint32_t addressBlock64 = 64 * BLOCK_SIZE;
 
-	    uint8_t writeData2[] = {x32, x32, x32, 32};
-	    //uint8_t writeData2[255] = {[0 ... 255] = 0xAA};
-		uint8_t writeDataLen2 = sizeof(writeData2); // size in bytes
+	    uint8_t rxBlock127[4096] = {};
+		uint32_t addressBlock127 = 127 * BLOCK_SIZE;
+*/
+	    //flash_write_page(addressBlock8, writeSectorData, sizeof(writeSectorData));
 
-		uint8_t readData2[255] = {0}; // 1 byte data read
-		uint8_t readDataLen2 = sizeof(readData2); // data length in bytes
+	    // Try to write sector 2
+		/*uint8_t pagesToWrite = 16;
+	    uint8_t sectorsToWrite = 2;
+	    uint16_t i;
+		uint16_t j;
+		uint32_t nextSector;
+		uint32_t nextAddress[pagesToWrite];
 
-	    flash_write_page(address, writeData2, writeDataLen2);
+	    // Starting address is block 8 address
+	    for (j = 0; j < sectorsToWrite; j ++){
+			nextSector = 4096 * j;
+			flash_4k_sector_erase(addressBlock8 + nextSector);
 
-	    flash_read(address, readData2, readDataLen2);
+			for(i = 0; i < pagesToWrite; i++){
+				// Get sector address
+				 nextAddress[i] = 256 * i + addressBlock8 + nextSector;
+				// Write page sector
+				flash_write_page(nextAddress[i], zeroOnePattern, 256);
 
-	    flash_chip_erase();
+			}
+		}*/
 
-	    flash_read(address, readData2, readDataLen2);
+	    // Read block 0
+/*	    // Read block 8
+	    flash_read(addressBlock8, rxBlock8Sector, sizeof(rxBlock8Sector));
+	    flash_read(addressBlock8+4096, rxBlock0Sector, sizeof(rxBlock0Sector));
+	    flash_read(addressBlock64, rxBlock64, sizeof(rxBlock64));
+	    flash_read(addressBlock127, rxBlock127, sizeof(rxBlock127));
+*/
 
-	    //}
+	    // Greeting message
+	    display_greeting();
+	    size_t rx_size;
+	    uint8_t rx_buff[1];
+	    uint64_t binary;
+
+	    // Calendar variable for RTC
+	    mss_rtc_calendar_t calendar_count;
+	    int diff_count;
+	    uint8_t msg[50];
+	    uint16_t i_rx;
+	    uint8_t out_rx[1024];
+	    uint8_t next_rx;
+
+	    // Address from user
+	    uint32_t address_from_user = 0;
+
+	    while (1){
+	    	rx_size = MSS_UART_get_rx(&g_mss_uart0, rx_buff, sizeof(rx_buff));
+
+	    	// Selection if user input > 1
+	    	if(rx_size > 0){
+				switch(rx_buff[0]){
+					case '1':
+						// Add erase
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************1 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Erasing all memory to 0xFF, please wait 2 minutes************\n\r");
+						flash_chip_erase();
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Full chip erase complete************\n\r");
+						break;
+					case '2':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************2 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Writing to memory, please wait 1 minute************\n\r");
+						flash_write_clean_full_chip(writeSectorData);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Write complete************\n\r");
+						break;
+
+					case '3':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************3 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Writing to memory, please wait 1 minute************\n\r");
+						flash_write_clean_full_chip(zeroOnePattern);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Write complete************\n\r");
+						break;
+
+					case '4':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************4 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Reading blocks, please wait************\n\r");
+						uint16_t errors = 0;
+						uint8_t j_rx; // 16 sectors of 4096 per block = 65,536
+						uint8_t k_rx; // 128 blocks of 64 kb per chip = 8,388,608
+						uint32_t next_address = 0;
+						// repeat 128 times
+						for (k_rx = 0; k_rx<128; k_rx++){
+						// repeat 16 times
+							for(j_rx = 0; j_rx < 16; j_rx++){
+								// should be sector 4096 * j
+								next_address = BLOCK_SIZE*k_rx + SECTOR_SIZE*j_rx;
+								flash_read(next_address, rxBlock0Sector, sizeof(rxBlock0Sector));
+							}
+							// Compare by blocks
+							if(memcmp(writeSectorData, rxBlock0Sector, sizeof(writeSectorData)) != 0){
+								//next_rx = rxBlock0Sector[i_rx];
+								sprintf((char *)out_rx,"\n\r\n\rError at block %d,\n\r", (int)next_address);
+								MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
+								errors += 1;
+							}
+							// Print output
+							/*for(i_rx = 0; i_rx < sizeof(rxBlock0Sector); i_rx++){
+								next_rx = rxBlock0Sector[i_rx];
+								sprintf((char *)out_rx,"\n\r\n\rReceived data is %d, at address %d, sector %d, block %d,\n\r", (int)next_rx, (int)i_rx,
+										(int)j_rx, (int)k_rx);
+								MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
+							}*/
+						}
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Read complete************\n\r");
+						sprintf((char *)out_rx,"\n\r%d, errors\n\r", (int)errors);
+						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
+
+
+						break;
+
+
+					case '5':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************5 pressed************\n\r");
+						MSS_RTC_get_calendar_count(&calendar_count);
+						// Display time ellapsed since start
+						diff_count = calendar_count.second + calendar_count.minute * 60;
+						sprintf((char *)msg, "\n\r\n\r*************Time elapsed is %d seconds************\n\r", (int)diff_count);
+						MSS_UART_polled_tx_string(&g_mss_uart0, msg);
+
+						break;
+
+					case '6':
+						runTimeTest(&g_mss_uart0);
+						break;
+					case '7':
+						//inject error
+						get_address_from_user();
+						flash_inject_fault(address_from_user, 0x64);
+						break;
+					default:
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************No op************\n\r");
+						break;
+				}
+	    	}
+	    }
+
+	    // To do
+	    // Add clean write to full chip
+	    // Compare read vs write results
+	    // Run test constantly
+	    // Generate output log
+	    // Save output log
+
+	    // Menu selection
+	    // 1. Select if chip polarized/not polarized
+
+	    	// 1.a. Program chip with 0101 1010 pattern
+	    	// 2. Set test time / Start test
+	    		// 2.a. Start test
+	    		// 2.b. Stop test - Should read chip and do log
+	    	// 3.
+	    	// 4.
+
 	return 0;
+}
+
+static void display_greeting(void)
+{
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r********************************************************************\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"************************* Memory Test Program **************************\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"********************************************************************\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"This project can read and write to external Flash memory.\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 1 - To write erase full Flash memory (0xFF) press \"1\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 2 - To write 0101 1010 (0x5A) pattern to full Flash memory press \"2\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 3 - To write 1010 1010 (0xAA) memory press \"3\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 4 - To read whole Flash memory press \"4\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 5 - To get time elapsed press \"5\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 6 - To run write chip - time metric press \"6\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 7 - To inject an error press \"7\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"--------------------------------------------------------------------\n\r\n\r");
+}
+
+// TO DO
+// Get full address and return it to the function
+static void get_address_from_user(void){
+	uint8_t block_rx;
+	uint8_t sector_rx;
+	uint8_t page_rx;
+
+	uint8_t rx_buff[1];
+	size_t rx_size;
+
+	rx_size = MSS_UART_get_rx(&g_mss_uart0, rx_buff, sizeof(rx_buff));
+
+    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Block: ");
+    get_input_from_user();
+    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Sector: ");
+    get_input_from_user();
+    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Page: ");
+    get_input_from_user();
+
+}
+
+static int32_t get_input_from_user(void){
+	int32_t user_input = 0;
+	uint8_t rx_buff[1];
+	uint8_t complete = 0;
+	size_t rx_size;
+
+	while(!complete)
+	{
+		rx_size = MSS_UART_get_rx(&g_mss_uart0, rx_buff, sizeof(rx_buff));
+		if(rx_size > 0)
+		{
+			MSS_UART_polled_tx(&g_mss_uart0, rx_buff, sizeof(rx_buff));
+			// UART terminal Enter button value : Carriage  Return or New Line
+			if(rx_buff[0] == ENTER || rx_buff[0] == NEW_LINE)
+			{
+				complete = 1;
+			}
+			else if((rx_buff[0] >= '0') && (rx_buff[0] <= '9'))
+			{
+				user_input = (user_input * 10) + (rx_buff[0] - '0');
+			}
+			else
+			{
+				user_input = INVALID_USER_INPUT;
+				complete = 1;
+			}
+		}
+	}
+	return user_input;
 }

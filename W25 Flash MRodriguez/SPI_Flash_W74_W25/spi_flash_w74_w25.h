@@ -32,13 +32,26 @@ void flash_jedec_id_read(mss_uart_instance_t *thisUart);
 
 void read_status_register(uint8_t *status);
 
-void flash_read (uint32_t address, uint8_t *readData, uint8_t readDataLen);
+void flash_read (uint32_t address, uint8_t *readData, uint32_t readDataLen);
 
-void flash_write_page(uint32_t address, uint8_t *writeData, uint8_t writeDataLen); // should use 0x06u write enable and 0x02u write 3byte addr
+void flash_write_page(uint32_t address, uint8_t *writeData, uint32_t writeDataLen); // should use 0x06u write enable and 0x02u write 3byte addr
+
+void flash_write_clean_sector(uint32_t sector_number, uint8_t *pageData);
+
+void flash_write_clean_full_chip(uint8_t *pageData);
 
 void flash_4k_sector_erase(uint32_t address);
 
+void flash_64k_block_erase(uint32_t address);
+
 void flash_chip_erase();
+
+// Fault injection and checking functions
+
+// Will inject 1 byte to a location
+void flash_inject_fault(uint32_t address, uint8_t data);
+
+int flash_check_sector_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer, uint16_t writtenLen, uint16_t readLen);
 
 
 
@@ -76,6 +89,7 @@ void flash_chip_erase();
 #define ERASE_SECTOR_4Byte_ADR		0x21u  // Command + 4 byte adr.. Erase 4 Kbyte sector
 #define ERASE_Block_3Byte_ADR		0x52u  // Command + 3 byte adr.. Erase 32 / 64 Kbyte block
 #define ERASE_Block_4Byte_ADR		0x5Cu  // Command + 4 byte adr.. Erase 32 / 64 Kbyte block
+#define ERASE_64kBlock_3Byte_ADR	0xD8u  // Command to erase 64k block + 3 byte address
 
 #define ERASE_CHIP					0xC7u  // Chip erase command C7 or 60
 
