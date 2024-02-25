@@ -118,10 +118,6 @@ struct time {
 #define BOUNCING_LIGHT					3
 
 
-// FLASH Definitions
-#define PAGE_SIZE						256U
-#define SECTOR_SIZE						4096U
-#define BLOCK_SIZE						65536U
 // User input Definitions
 #define INVALID_USER_INPUT  -1
 #define ENTER               '\r'	// Line Feed
@@ -571,7 +567,6 @@ void ledChangePattern (struct combine * app) {
 }
 
 static void display_greeting(void);
-static int32_t get_address_from_user(void);
 static int32_t get_input_from_user(void);
 
 int main (void)
@@ -591,7 +586,7 @@ int main (void)
 
 	// SPI init
 	FLASH_init();
-    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\r\n\r\n************************** Init SPI ************************");
+    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\r\n************************** Init SPI ************************");
 
     // Timer init
 	uint32_t timer1_load_value = (uint32_t) 100000000 / 24; // 1/24'th s @ 100 MHz
@@ -602,47 +597,29 @@ int main (void)
 	// While loop variables
 	uint16_t dutyCycle = 0;
 
-	// Flash variables
-	uint32_t address = 0x0; // 24 byte address to read
-	uint8_t readData[16] = {0}; // 1 byte data read
-	uint8_t readDataLen = sizeof(readData); // data length in bytes
-
-	uint8_t writeData[16] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11, 0x22,
-							0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99};
-	uint8_t writeDataLen = sizeof(writeData); // size in bytes
-
 	uint8_t read_msg[30];
 
 
 
 		// Custom functions
 		flash_manufacturer_device_id_read(&g_mss_uart0);
-	    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\r\n\r\n************************** SPI Ready ************************");
+	    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"************************** SPI Ready ***********************");
 
 	    uint8_t writeData2[] = {};
 	    uint8_t allZeros[256] = {};
 	    uint8_t allOnes[256] = {[0 ... 255] = 1};
 	    uint8_t zeroOnePattern[256] = {[0 ... 255] = 0xAA};
-		//uint16_t zeroOnePatternLen = sizeof(zeroOnePattern); // size in bytes
-
-		// Generate zero-one pattern
-		//One zero pattern
-		//zeroOnePattern[0] = 0xaa; //was 0xff
-		//memcpy(zeroOnePattern, zeroOnePattern, sizeof zeroOnePattern - sizeof *zeroOnePattern);
 
 	    // A sector is 4096, 16 sector in a block
 	    // We have 128 blocks of 64KB (65 536 bytes)
-	    uint8_t writeSectorData[256] = {[0 ... 255] = 0x5A};
-	    //One zero pattern
-	    // memory with the same pattern
-		//writeSectorData[0] = 0x5A; // 0101 1010 pattern
-	    //memcpy(writeSectorData, writeSectorData, sizeof writeSectorData - sizeof *writeSectorData);
-
-	    //flash_write_clean_full_chip(writeSectorData);
-
+	    uint8_t writeSectorData[256] = {[0 ... 255] = 0xA5};
+	    uint8_t compareBufferFullSector[4096] = {[0 ... 4095] = 0xA5};
 	    // Verify first sector of each block
 	    uint8_t rxBlock0Sector[4096] = {};
 	    uint32_t addressBlock0 = 0 * BLOCK_SIZE;
+
+	    // Faulty sector to inject
+	    uint8_t faultySectorData[256] = {[0 ... 255] = 0xCB};
 
 
 
@@ -716,7 +693,7 @@ int main (void)
 
 	    /*
 		 *
-		 * *********************ENVM FUNCTIONS***********************
+		 * *********************END OF eNVM FUNCTIONS***********************
 		 *
 		 * */
 
@@ -728,81 +705,72 @@ int main (void)
 	    	if(rx_size > 0){
 				switch(rx_buff[0]){
 					case '1':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************1 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Erasing all memory to 0xFF, please wait 2 minutes************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************1 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Erasing all memory to 0xFF, please wait 2 minutes************\n\r");
 						flash_chip_erase();
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Full chip erase complete************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Full chip erase complete************\n\r");
 						break;
+					// Make this Erase->Write->Read->Second_Read
 					case '2':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************2 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Writing to memory, please wait 1 minute************\n\r");
+						// Write full chip to 0xA5
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************2 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Writing to memory, please wait 1 minute************\n\r");
 						flash_write_clean_full_chip(writeSectorData);
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Write complete************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Write complete************\n\r");
+						// First read
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Starting First Read************\n\r");
+						uint32_t errors_case_2 = flash_check_full_chip_for_errors(compareBufferFullSector, rxBlock0Sector);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"[INFO] *************First Read Complete************\n\r");
+						sprintf((char *)out_rx,"\n\r[INFO] %d errors\n\r", (int)errors_case_2);
+						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
+						// Second read
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Starting Second Read************\n\r");
+						errors_case_2 = flash_check_full_chip_for_errors(compareBufferFullSector, rxBlock0Sector);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"[INFO] *************Second Read Complete************\n\r");
+						sprintf((char *)out_rx,"\n\r[INFO] %d errors\n\r", (int)errors_case_2);
+						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
 						break;
 
 					case '3':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************3 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Writing to memory, please wait 1 minute************\n\r");
-						flash_write_clean_full_chip(zeroOnePattern);
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Write complete************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************3 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Reading blocks, please wait************\n\r");
+						uint32_t errors = flash_check_full_chip_for_errors(compareBufferFullSector, rxBlock0Sector);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************Read complete************\n\r");
+						sprintf((char *)out_rx,"\n\r[INFO] %d errors\n\r", (int)errors);
+						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
 						break;
+
 
 					case '4':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************4 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Reading blocks, please wait************\n\r");
-						uint16_t errors = 0;
-						uint8_t j_rx; // 16 sectors of 4096 per block = 65,536
-						uint8_t k_rx; // 128 blocks of 64 kb per chip = 8,388,608
-						uint32_t next_address = 0;
-						// repeat 128 times
-						for (k_rx = 0; k_rx<128; k_rx++){
-						// repeat 16 times
-							for(j_rx = 0; j_rx < 16; j_rx++){
-								// should be sector 4096 * j
-								next_address = BLOCK_SIZE*k_rx + SECTOR_SIZE*j_rx;
-								flash_read(next_address, rxBlock0Sector, sizeof(rxBlock0Sector));
-							}
-							// Compare by blocks
-							if(memcmp(writeSectorData, rxBlock0Sector, sizeof(writeSectorData)) != 0){
-								//next_rx = rxBlock0Sector[i_rx];
-								sprintf((char *)out_rx,"\n\r\n\rError at block %d,\n\r", (int)next_address);
-								MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
-								errors += 1;
-							}
-							// Print output
-							/*for(i_rx = 0; i_rx < sizeof(rxBlock0Sector); i_rx++){
-								next_rx = rxBlock0Sector[i_rx];
-								sprintf((char *)out_rx,"\n\r\n\rReceived data is %d, at address %d, sector %d, block %d,\n\r", (int)next_rx, (int)i_rx,
-										(int)j_rx, (int)k_rx);
-								MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
-							}*/
-						}
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************Read complete************\n\r");
-						sprintf((char *)out_rx,"\n\r%d, errors\n\r", (int)errors);
-						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
-
-
-						break;
-
-
-					case '5':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************5 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************4 pressed************\n\r");
 						MSS_RTC_get_calendar_count(&calendar_count);
 						// Display time ellapsed since start
 						diff_count = calendar_count.second + calendar_count.minute * 60;
-						sprintf((char *)msg, "\n\r\n\r*************Time elapsed is %d seconds************\n\r", (int)diff_count);
+						sprintf((char *)msg, "\n\r[INFO] *************Time elapsed is %d seconds************\n\r", (int)diff_count);
 						MSS_UART_polled_tx_string(&g_mss_uart0, msg);
-
 						break;
 
-					case '6':
+					case '5':
 						//inject error
-						address_from_user = get_address_from_user();
-						flash_inject_fault(address_from_user, 0x64);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************5 pressed************\n\r");
+						//address_from_user = get_address_from_user();
+						uint8_t resultAfterFault[256] = {};
+						flash_inject_fault(0x001, 0xCB);
+						flash_inject_fault(0x1100, 0xCB);
+						flash_inject_fault(0x2010, 0xCB);
+						flash_inject_fault(0x10100, 0xCB);
+						flash_inject_fault(0x32110, 0xCB);
+						// New tests
+						flash_inject_fault(0x10FA0, 0xCB);
+						flash_inject_fault(0x400FB5, 0xCB);
+						flash_inject_fault(0x730998, 0xCB);
+						flash_inject_fault(0x7F1000, 0xCB);
+
+
 						break;
-					case '7':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************7 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************************\n\r");
+					case '6':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r[INFO] *************6 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r[INFO] *************************\n\r");
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Erasing eNVM...");
 						erase_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write);
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Writing eNVM...");
@@ -813,36 +781,25 @@ int main (void)
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Reading eNVM 2nd Time...");
 						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
 						break;
-					case '8':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************8 pressed************\n\r");
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************************\n\r");
+					case '7':
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r[INFO] *************7 pressed************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r[INFO] *************************\n\r");
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Reading eNVM after Irradiation...");
 						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
+						break;
+
+					case '9':
+						display_greeting();
+						break;
 					default:
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************No op************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] *************No op************\n\r");
 						break;
 				}
-				sprintf(msg, "\n\rIteration #%d done...\n\r", globals.loopCounter);
+				sprintf(msg, "\n\r[INFO] Iteration #%d done...\n\r", globals.loopCounter);
 				MSS_UART_polled_tx_string (&g_mss_uart0, msg);
+				globals.loopCounter++;
 	    	}
 	    }
-
-	    // To do
-	    // Add clean write to full chip
-	    // Compare read vs write results
-	    // Run test constantly
-	    // Generate output log
-	    // Save output log
-
-	    // Menu selection
-	    // 1. Select if chip polarized/not polarized
-
-	    	// 1.a. Program chip with 0101 1010 pattern
-	    	// 2. Set test time / Start test
-	    		// 2.a. Start test
-	    		// 2.b. Stop test - Should read chip and do log
-	    	// 3.
-	    	// 4.
 
 	return 0;
 }
@@ -850,44 +807,20 @@ int main (void)
 static void display_greeting(void)
 {
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r********************************************************************\n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"************************* Memory Test Program **************************\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"*********************** Memory Test Program ************************\n\r");
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"********************************************************************\n\r");
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"Functions to read and write to external Flash memory.\n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 1 - To write erase full Flash memory (0xFF) press \"1\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 2 - To write 0101 1010 (0x5A) pattern to full Flash memory press \"2\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 3 - To write 1010 1010 (0xAA) memory press \"3\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 4 - To read whole Flash memory press \"4\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 5 - To get time elapsed press \"5\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 6 - To inject an error press \"6\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"--------------------------------------------------------------------\n\r\n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"Functions to read and write to external eNVM memory.\n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 7 - eNVM Erase->Write->Read->Second_Read press \"7\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 8 - eNVM Read Operation After Irradiation press \"8\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 1 - To erase full Flash memory (0xFF) \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 2 - To Erase->Write (0xA5)->Read->Second_Read to full Flash memory \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 3 - To read whole Flash memory After Irradiation\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 4 - To get time elapsed \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 5 - To inject an error \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"--------------------------------------------------------------------\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"Functions to read and write to internal eNVM memory.\n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 6 - eNVM Erase->Write->Read->Second_Read \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 7 - eNVM Read Operation After Irradiation \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 9 - Show options (if log is too long) \n\r");
 
-}
-
-static int32_t get_address_from_user(void){
-	uint8_t block_rx;
-	uint8_t sector_rx;
-	uint8_t page_rx;
-
-	uint32_t final_address = 0;
-
-	uint8_t rx_buff[1];
-	size_t rx_size;
-
-	rx_size = MSS_UART_get_rx(&g_mss_uart0, rx_buff, sizeof(rx_buff));
-
-    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Block: ");
-    block_rx = get_input_from_user();
-    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Sector: ");
-    sector_rx = get_input_from_user();
-    MSS_UART_polled_tx_string(&g_mss_uart0, (const uint8_t *)"\n\r Page: ");
-    page_rx = get_input_from_user();
-
-    final_address = block_rx * BLOCK_SIZE + sector_rx * SECTOR_SIZE + page_rx * PAGE_SIZE;
-
-    return final_address;
 }
 
 static int32_t get_input_from_user(void){

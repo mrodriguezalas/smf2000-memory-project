@@ -53,7 +53,7 @@ void flash_inject_fault(uint32_t address, uint8_t data);
 
 int flash_check_sector_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer, uint16_t writtenLen, uint16_t readLen);
 
-
+int flash_check_full_chip_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer);
 
 // JEDEC Standard Commands : ###################################################
 #define ID_DEVICE				 	0xabu  // Response = 3 dummy bytes + 1 byte Dev.ID
@@ -68,6 +68,10 @@ int flash_check_sector_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer, u
 #define READY_BIT_MASK				0x01u
 #define DONT_CARE               	0x00u
 #define DUMMY_BYTES					0x00u
+// FLASH Definitions
+#define PAGE_SIZE						256U
+#define SECTOR_SIZE						4096U
+#define BLOCK_SIZE						65536U
 
 // Flash Commands defines #######################################################
 // Some of these commands are general commands to many flash chips ##############

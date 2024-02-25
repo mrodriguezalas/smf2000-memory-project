@@ -6,6 +6,8 @@
  */
 
 #include "spi_flash_w74_w25.h"
+#include <string.h> /* memset, memcmp */
+
 /*
  * **************************************************************************
  * Custom Functions
@@ -381,3 +383,38 @@ int flash_check_sector_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer, u
 	}
 	return 0;
 }
+
+int flash_check_full_chip_for_errors(uint8_t *writtenBuffer, uint8_t *readBuffer){
+	uint32_t errors = 0;
+	uint8_t j_rx; // 16 sectors of 4096 per block = 65,536
+	uint8_t k_rx; // 128 blocks of 64 kb per chip = 8,388,608
+	uint32_t next_address = 0;
+    uint8_t out_rx[1024];
+
+	// repeat 128 times
+	for (k_rx = 0; k_rx<128; k_rx++){
+	// repeat 16 times
+		for(j_rx = 0; j_rx < 16; j_rx++){
+			// should be sector 4096 * j
+			next_address = BLOCK_SIZE*k_rx + SECTOR_SIZE*j_rx;
+			flash_read(next_address, readBuffer, SECTOR_SIZE);
+			// Compare by blocks
+			if(memcmp(writtenBuffer, readBuffer, SECTOR_SIZE) != 0){
+				// TODO add loop to find index of different read
+				for(uint16_t i_cmp = 0; i_cmp < 4096; i_cmp++){
+					if(writtenBuffer[i_cmp] != readBuffer[i_cmp]){
+						sprintf((char *)out_rx,"\n\r\n\r[W25ERROR] Error at sector %d - index %d \n\r", (int)next_address/SECTOR_SIZE, (int)i_cmp);
+						MSS_UART_polled_tx_string(&g_mss_uart0, out_rx);
+						errors += 1;
+					}
+				}
+
+			}
+		}
+
+
+	}
+
+	return errors;
+}
+
