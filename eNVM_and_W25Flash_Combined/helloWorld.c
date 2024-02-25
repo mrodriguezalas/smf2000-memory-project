@@ -800,105 +800,24 @@ int main (void)
 						address_from_user = get_address_from_user();
 						flash_inject_fault(address_from_user, 0x64);
 						break;
-					// Case 01 in original code
 					case '7':
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************7 pressed************\n\r");
-						sprintf(msg, "\n\r[INFO] Starting Erase->Write/Program->Read->Second_Read (0x01) operation\n\r");
-						MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-
-						// loop over pages and flash the whole eNVM
-						for (current_page = 0; current_page < total_pages_to_write; current_page++)
-						{
-							// calculate page address
-							volatile uint32_t page_address = nvm_start_addr + (current_page * page_size);
-
-							// erase nvm page
-							envm_status_returned = erase_nvm_flash_page(&g_mss_uart0, page_address);
-
-							//print_whole_page(&g_mss_uart0, page_address);
-
-							// unlock eNVM from the start_addr to stop_addr
-							envm_status_returned = NVM_unlock(page_address, page_size);
-
-							// nvm sends error message
-							if (envm_status_returned != NVM_SUCCESS && envm_status_returned != NVM_WRITE_THRESHOLD_WARNING)
-							{
-								sprintf(msg, "\n\rERROR: Unlocking eNVM page#%d failed @ addr %x with nvm_status_error %d !!!\n\r",
-										current_page, nvm_start_addr + (current_page * page_size), envm_status_returned);
-								MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-								interpret_envm_status(&g_mss_uart0, envm_status_returned);
-								envm_write_error = 1;
-								continue;
-							}
-
-							// write to eNVM
-							envm_status_returned = NVM_write(page_address, ptr_data_to_write_nvm, page_size, NVM_DO_NOT_LOCK_PAGE);
-
-							if (envm_status_returned != NVM_SUCCESS && envm_status_returned != NVM_WRITE_THRESHOLD_WARNING)
-							{
-								sprintf(msg, "\n\rERROR: Writing to page#%d failed @ addr %x with nvm_status_error %d!!!\n\r",
-										current_page, nvm_start_addr + (current_page * page_size), envm_status_returned);
-								MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-								interpret_envm_status(&g_mss_uart0, envm_status_returned);
-								continue;
-							}
-
-							// put error in the middle of page
-
-							volatile uint8_t fault_byte = 0xA5;
-
-			//				envm_status_returned = inject_single_fault_envm(page_address, char_written, fault_byte);
-			//				//print_whole_page(&g_mss_uart0, page_address);
-			//				find_bit_flips_in_page(&g_mss_uart0, page_address, char_written);
-
-							// verify if page write is unsuccessful by comparing the allocated
-							// memory array with the 128 byte data written into the page
-			//				if (memcmp(nvm_start_addr + (current_page * page_size), ptr_data_to_write_nvm, page_size) != 0)
-			//				{
-			//					envm_write_error = 1;
-			//					sprintf (msg, "\n\r\n\r" "[ERROR] Read/Write Value Different in page#%d!!!", current_page);
-			//					MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-			//				}
-
-						}
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************************\n\r");
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Erasing eNVM...");
+						erase_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Writing eNVM...");
+						write_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
+						///inject_single_fault_envm(nvm_start_addr + 1000 * 128, 25, 0xAA, 0x11);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Reading eNVM 1st Time...");
+						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Reading eNVM 2nd Time...");
+						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
 						break;
-					// Case 02 in original code
 					case '8':
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************8 pressed************\n\r");
-						sprintf(msg, "\n\r[INFO] Starting Read Operation (0x02) only...\n\r");
-						MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-
-						// loop over pages and flash the whole eNVM
-						for (current_page = 0; current_page < total_pages_to_write; current_page++)
-						{
-							// unlock eNVM from the start_addr to stop_addr
-							envm_status_returned = NVM_unlock(nvm_start_addr + (current_page * page_size), page_size);
-
-							// verify if page write is unsuccessful by comparing the allocated
-							// memory array with the 128 byte data written into the page
-							if (memcmp(nvm_start_addr + (current_page * page_size), ptr_data_to_write_nvm, page_size) != 0)
-							{
-								// found difference in written value vs read value (i.e. a bitflip)
-								// TODO if difference found go byte by byte to find changed value
-								envm_write_error = 1;
-								sprintf (msg, "\n\r\n\r" "[ERROR] Read/Write Value Different in page#%d!!!", current_page);
-								MSS_UART_polled_tx_string (&g_mss_uart0, msg);
-							}
-						}
-						break;
-					// Case 03 in original code
-					case '9':
-						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************9 pressed************\n\r");
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************************\n\r");
-						RTC_TIMESTAMP(&g_mss_uart0);
-						erase_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write);
-						RTC_TIMESTAMP(&g_mss_uart0);
-						write_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xAA);
-						RTC_TIMESTAMP(&g_mss_uart0);
-						///inject_single_fault_envm(nvm_start_addr + 1000 * 128, 25, 0xAA, 0x11);
-						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xAA);
-						RTC_TIMESTAMP(&g_mss_uart0);
-						break;
+						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r[INFO] Reading eNVM after Irradiation...");
+						read_nvm_flash(&g_mss_uart0, nvm_start_addr, total_pages_to_write, 0xA5);
 					default:
 						MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"\n\r\n\r*************No op************\n\r");
 						break;
@@ -942,9 +861,8 @@ static void display_greeting(void)
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 6 - To inject an error press \"6\" \n\r");
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"--------------------------------------------------------------------\n\r\n\r");
     MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)"Functions to read and write to external eNVM memory.\n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 7 - Starting Erase->Write/Program->Read->Second_Read (0x01) operation press \"7\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 8 - Starting Read Operation (0x02) only... press \"8\" \n\r");
-    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 9 - For RTC_TIMESTAMP press \"9\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 7 - eNVM Erase->Write->Read->Second_Read press \"7\" \n\r");
+    MSS_UART_polled_tx_string(&g_mss_uart0,(const uint8_t*)" 8 - eNVM Read Operation After Irradiation press \"8\" \n\r");
 
 }
 
