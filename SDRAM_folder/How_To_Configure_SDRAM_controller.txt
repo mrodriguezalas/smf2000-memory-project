@@ -1,0 +1,2 @@
+* 1. All the parameter configuration for the SDRAM controller in Libero of the project: can be found in the pdf "SMF2000-pinout-v8" in the same folder with this note.
+* 2. The 'Autorefresh' of the SDRAM controller in Libero must be 'Disabled', otherwise, the SDRAM will introduce systematic error due to the 'Enabled' 'Autorefresh' of the controller.
