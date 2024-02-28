@@ -24,7 +24,7 @@ void write_nvm_flash(mss_uart_instance_t * this_uart, uint32_t start_addr,
 nvm_status_t inject_single_fault_envm(uint32_t page_addr,uint8_t flip_loc, uint8_t default_byte, uint8_t faulty_byte);
 nvm_status_t inject_rand_single_fault_envm(uint32_t page_addr, uint8_t default_byte, uint8_t faulty_byte);
 void print_whole_page(mss_uart_instance_t * this_uart, uint32_t addr);
-void find_bit_flips_in_page(mss_uart_instance_t * this_uart, uint32_t addr, uint8_t expected_byte);
+uint32_t find_bit_flips_in_page(mss_uart_instance_t * this_uart, uint32_t addr, uint8_t expected_byte);
 void read_nvm_flash(mss_uart_instance_t * this_uart, uint32_t start_addr,
 		uint32_t num_of_pages,  uint8_t expected_byte);
 
